@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<package>
+<package format="2">
   <name>multi_object_tracking_lidar</name>
   <version>1.0.3</version>
   <description>ROS package for Multiple objects detection, tracking and classification from LIDAR scans/point-clouds</description>
@@ -40,21 +40,16 @@
   <!-- Use test_depend for packages you need only for testing: -->
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>pcl_ros</build_depend>
-  <build_depend>roscpp</build_depend>
-  <build_depend>sensor_msgs</build_depend>
-  <build_depend>visualization_msgs</build_depend>
+  <depend>pcl_ros</depend>
+  <depend>roscpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>visualization_msgs</depend>
   <build_depend>libpcl-all-dev</build_depend>
-  <build_depend>cv_bridge</build_depend>
+  <depend>cv_bridge</depend>
 
-  <run_depend>libpcl-all</run_depend>
-  <run_depend>pcl_ros</run_depend>
-  <run_depend>roscpp</run_depend>
-  <run_depend>sensor_msgs</run_depend>
-  <run_depend>visualization_msgs</run_depend>
-  <run_depend>cv_bridge</run_depend>
+  <depend>libpcl-all</depend>
 
-
+  <depend>turtlebot3_detect</depend>
   <!-- The export tag contains other, unspecified, tags -->
   <export>
     <!-- Other tools can request additional information be placed here -->

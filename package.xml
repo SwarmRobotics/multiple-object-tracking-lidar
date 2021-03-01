@@ -40,6 +40,8 @@
   <!-- Use test_depend for packages you need only for testing: -->
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
+   <build_depend>message_generation</build_depend>
+
   <depend>pcl_ros</depend>
   <depend>roscpp</depend>
   <depend>sensor_msgs</depend>
@@ -49,7 +51,7 @@
 
   <depend>libpcl-all</depend>
 
-  <depend>turtlebot3_detect</depend>
+    <depend>turtlebot3_detect</depend>
   <!-- The export tag contains other, unspecified, tags -->
   <export>
     <!-- Other tools can request additional information be placed here -->

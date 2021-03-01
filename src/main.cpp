@@ -39,7 +39,7 @@
 #include <visualization_msgs/Marker.h>
 #include <limits>
 #include <utility>
-#include <GetObst.h>
+#include "turtlebot3_detect/GetObst.h"
 
 using namespace std;
 using namespace cv;
@@ -609,21 +609,22 @@ else
 }   
 
 
- bool getobstacles(GetObst::Request  &req,
-         GetObst::Response &res)
+ bool getobstacles(turtlebot3_detect::GetObst::Request  &req,
+         turtlebot3_detect::GetObst::Response &res)
 {
-    geometry_msgs::Point[KFs.size()] pts;
+    geometry_msgs::Point pts[KFs.size()];
+    res.points.clear();
     for (int i =0; i < KFs.size(); i++)
      {
         cv::Mat pred = KFs.at(i).predict();
-       
-        pts[i].x=pred.at<float>(0);
-        pts[i].y=pred.at<float>(1);
-        pts[i].z=pred.at<float>(2);
+        geometry_msgs::Point32 p;
+        p.x=pred.at<float>(0);
+        p.y=pred.at<float>(1);
+        p.z=pred.at<float>(2);
+        res.points.push_back(p);
         
     }
     res.head.stamp= ros::Time::now();
-    res.points=pts;
     return true;
 } 
 
@@ -666,7 +667,7 @@ int main(int argc, char** argv)
     
   //cc_pos=nh.advertise<std_msgs::Float32MultiArray>("ccs",100);//clusterCenter1
   markerPub= nh.advertise<visualization_msgs::MarkerArray> ("viz",1);
-  ros::ServiceServer obstacles_service = n.advertiseService("get_obstacles_data", getobstacles);
+  ros::ServiceServer obstacles_service = nh.advertiseService("get_obstacles_data", getobstacles);
 
 /* Point cloud clustering
 */    

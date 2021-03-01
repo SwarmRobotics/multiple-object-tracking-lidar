@@ -86,7 +86,7 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES kf_tracker
 #  CATKIN_DEPENDS pck_ros roscpp sensor_msgs
-#  DEPENDS system_lib
+  DEPENDS turtlebot3_detect
 )
 
 ###########

@@ -352,6 +352,10 @@ if (firstFrame)
   pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
 
   pcl::fromROSMsg (*input, *input_cloud);
+  if(input_cloud->empty())
+  {
+    return;
+  }
 
   tree->setInputCloud (input_cloud);
 

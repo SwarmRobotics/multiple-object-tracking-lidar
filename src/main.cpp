@@ -470,7 +470,10 @@ else
   pcl::fromROSMsg (*input, *input_cloud);
 
   tree->setInputCloud (input_cloud);
-
+  if(input_cloud->empty())
+  {
+    return;
+  }
   /* Here we are creating a vector of PointIndices, which contains the actual index
    * information in a vector<int>. The indices of each detected cluster are saved here.
    * Cluster_indices is a vector containing one instance of PointIndices for each detected 

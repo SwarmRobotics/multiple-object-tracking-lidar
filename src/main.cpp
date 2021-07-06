@@ -4,12 +4,7 @@
 #include <algorithm>
 #include <iterator>
 #include "kf_tracker/featureDetection.h"
-#include "kf_tracker/CKalmanFilter.h"
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/video/video.hpp>
-#include "opencv2/video/tracking.hpp"
+#include "kf_tracker/kalman.hpp"
 #include <ros/ros.h>
 #include <ros/console.h>
 
@@ -19,7 +14,7 @@
 #include <geometry_msgs/Point.h>
 #include <std_msgs/Float32MultiArray.h>
 #include <std_msgs/Int32MultiArray.h>
-
+#include <Eigen/Dense>
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
@@ -42,33 +37,21 @@
 #include "turtlebot3_detect/GetObst.h"
 
 using namespace std;
-using namespace cv;
 
 
 ros::Publisher objID_pub;
 
-    // KF init
-    int stateDim=4;// [x,y,v_x,v_y]//,w,h]
-    int measDim=2;// [z_x,z_y,z_w,z_h]
-    int ctrlDim=0;
-
-    std::vector<cv::KalmanFilter> KFs;
-  //  std::vector<ros::Publisher> pub_clusters;
-
-  
 
 
-    ros::Publisher markerPub;
+  std::vector<KalmanFilter> KFs;
+  ros::Publisher markerPub;
 
-    //std::vector<geometry_msgs::Point> prevClusterCenters;
+  Eigen::Vector6d state; // [x,y,v_x,v_y,w,h]
+  Eigen::Vector4d measurement; // [z_x,z_y,z_w,z_h] 
 
-
-    cv::Mat state(stateDim,1,CV_32F);
-    cv::Mat_<float> measurement(2,1); 
-
-    std::vector<int> objID;// Output of the data association using KF
-   // measurement.setTo(Scalar(0));
-    float cluster_size=1;
+  std::vector<int> objID;// Output of the data association using KF
+ // measurement.setTo(Scalar(0));
+  float cluster_size=1;
 
 bool firstFrame=true;
 
@@ -123,25 +106,14 @@ void KFT(const std_msgs::Float32MultiArray ccs)
 
 
 
-    // First predict, to update the internal statePre variable
-  std::vector<cv::Mat> pred;
+// First predict, to update the internal statePre variable
+  std::vector<Eigen::VectorXd> pred;
   for (int i =0; i < KFs.size(); i++)
   {
-    pred.push_back(KFs.at(i).predict());
+    pred.push_back(KFs.at(i).state());
   }
- // cout<<"ccs"<<ccs.data.size()<<endl;
-//    std::vector<cv::Mat> pred{KF0.predict(),
-  //                            KF1.predict(),
-    //                          KF2.predict(),
-      //                        KF3.predict(),
-        //                      KF4.predict(),
-          //                    KF5.predict()};
-  
- //cout<<"Pred successfull\n";
-
-    //cv::Point predictPt(prediction.at<float>(0),prediction.at<float>(1));
-   // cout<<"Prediction 1 ="<<prediction.at<float>(0)<<","<<prediction.at<float>(1)<<"\n";
-
+ 
+ 
     // Get measurements
     // Extract the position of the clusters forom the multiArray. To check if the data
     // coming in, check the .z (every third) coordinate and that will be 0.0
@@ -159,16 +131,14 @@ void KFT(const std_msgs::Float32MultiArray ccs)
        
     }
 
-  //  cout<<"CLusterCenters Obtained"<<"\n";
     std::vector<geometry_msgs::Point> KFpredictions;
     i=0;
     for (auto it=pred.begin();it!=pred.end();it++)
     {
         geometry_msgs::Point pt;
-        pt.x=(*it).at<float>(0);
-        pt.y=(*it).at<float>(1);
-        pt.z=(*it).at<float>(2);
-
+        pt.x=(*it)(0);
+        pt.y=(*it)(1);
+        pt.z=0;
         KFpredictions.push_back(pt);
         
     }
@@ -192,29 +162,9 @@ void KFT(const std_msgs::Float32MultiArray ccs)
         }
 
         distMat.push_back(distVec);
-      /*// Based on distVec instead of distMat (global min). Has problems with the person's leg going out of scope 
-       int ID=std::distance(distVec.begin(),min_element(distVec.begin(),distVec.end()));
-       //cout<<"finterlN="<<filterN<<"   minID="<<ID
-       objID.push_back(ID);
-      // Prevent assignment of the same object ID to multiple clusters
-       copyOfClusterCenters[ID].x=100000;// A large value so that this center is not assigned to another cluster
-       copyOfClusterCenters[ID].y=10000;
-       copyOfClusterCenters[ID].z=10000;
-      */
-  //   cout<<"filterN="<<filterN<<"\n";
-
-
+      
     }
 
-   // cout<<"distMat.size()"<<distMat.size()<<"\n";
-   // cout<<"distMat[0].size()"<<distMat.at(0).size()<<"\n";
-    // DEBUG: print the distMat
-    /*for ( const auto &row : distMat )
-    {
-       for ( const auto &s : row )
-       std::cout << s << ' ';
-       std::cout << std::endl;
-    }*/
 
 
 
@@ -257,7 +207,7 @@ void KFT(const std_msgs::Float32MultiArray ccs)
         m.id=i;
         m.type=visualization_msgs::Marker::CUBE;
         m.header.frame_id="base_link";
-        m.scale.x=0.3;         m.scale.y=0.3;         m.scale.z=0.3;
+        m.scale.z=0.3;
         m.action=visualization_msgs::Marker::ADD;
         m.color.a=1.0;
         m.color.r=i%2?1:0;
@@ -265,11 +215,14 @@ void KFT(const std_msgs::Float32MultiArray ccs)
         m.color.b=i%4?1:0;
 
        //geometry_msgs::Point clusterC(clusterCenters.at(objID[i]));
-        geometry_msgs::Point clusterC(KFpredictions[i]);
-       m.pose.position.x=clusterC.x;
-       m.pose.position.y=clusterC.y;
-       m.pose.position.z=clusterC.z;
+       m.pose.position.x=pred[i][0];
+       m.pose.position.y=pred[i][1];
+       m.pose.position.z=0;
 
+       m.scale.x=pred[i][4];
+       m.scale.y=pred[i][5];
+       
+       visualization_msgs
        clusterMarkers.markers.push_back(m);
      }
 
@@ -288,21 +241,12 @@ void KFT(const std_msgs::Float32MultiArray ccs)
     // convert clusterCenters from geometry_msgs::Point to floats
     for (int i=0;i<KFs.size();i++)
     {
-        
-    
-        float meas[2] ={clusterCenters[objID[i]].x,  clusterCenters[objID[i]].y};
-        cv::Mat measMat=cv::Mat(2,1,CV_32F,meas);
-        if (!(measMat.at<float>(0,0)==0.0f || measMat.at<float>(1,0)==0.0f))
-            Mat estimated = KFs.at(i).correct(measMat);
+        Eigen::Vector6d measMat(clusterCenters[objID[i]].x,  clusterCenters[objID[i]].y)
+        if (!(measMat.at[0,0]==0.0f || measMat[1,0]==0.0f))
+            KFs.at(i).update(measMat);
     }
 
  
-    // Publish the point clouds belonging to each clusters
-
-
-   // cout<<"estimate="<<estimated.at<float>(0)<<","<<estimated.at<float>(1)<<"\n";
-   // Point statePt(estimated.at<float>(0),estimated.at<float>(1));
-//cout<<"DONE KF_TRACKER\n";
    
 }
 void publish_cloud(ros::Publisher& pub, pcl::PointCloud<pcl::PointXYZ>::Ptr cluster){
@@ -314,22 +258,6 @@ void publish_cloud(ros::Publisher& pub, pcl::PointCloud<pcl::PointXYZ>::Ptr clus
 
 }
 
-void firstrun(int i)
-{
-    float dvx=1.0f; //1.0
-    float dvy=1.0f;//1.0
-    float dx=1.0f;
-    float dy=1.0f;
-    
-    KFs.at(i).transitionMatrix = (Mat_<float>(4, 4) << dx,0,1,0,   0,dy,0,1,  0,0,dvx,0,  0,0,0,dvy);
-    cv::setIdentity( KFs.at(i).measurementMatrix);
-    
-    float sigmaP=0.01;
-    float sigmaQ=0.1;
-    setIdentity(KFs.at(i).processNoiseCov, Scalar::all(sigmaP));
-    cv::setIdentity(KFs.at(i).measurementNoiseCov, cv::Scalar(sigmaQ));
-  
-  }
 
 void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input)
 
@@ -338,13 +266,6 @@ void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input)
     // If this is the first frame, initialize kalman filters for the clustered objects
 if (firstFrame)
 {   
-  // Initialize 6 Kalman Filters; Assuming 6 max objects in the dataset. 
-  // Could be made generic by creating a Kalman Filter only when a new object is detected  
-  for(int i =0; i< KFs.size(); i++)
-    {
-      firstrun(i);
-    }
-
 // Process the point cloud
      pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud (new pcl::PointCloud<pcl::PointXYZ>);
   pcl::PointCloud<pcl::PointXYZ>::Ptr clustered_cloud (new pcl::PointCloud<pcl::PointXYZ>);
@@ -377,6 +298,7 @@ if (firstFrame)
   std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr > cluster_vec;
     // Cluster centroids
   std::vector<pcl::PointXYZ> clusterCentroids;
+  std::vector<pcl::PointXYZ> clustersize;
 
   for(it = cluster_indices.begin(); it != cluster_indices.end(); ++it) {
           
@@ -407,7 +329,7 @@ if (firstFrame)
 
       //Get the centroid of the cluster
       clusterCentroids.push_back(centroid);
-
+      clustersize.push_back(size);
 
     }
 
@@ -431,31 +353,13 @@ if (firstFrame)
       for(int i =0; i< KFs.size(); i++)
       {
        // Set initial state
-       KFs.at(i).statePre.at<float>(0)=clusterCentroids.at(i).x;
-       KFs.at(i).statePre.at<float>(1)=clusterCentroids.at(i).y;
-       KFs.at(i).statePre.at<float>(2)=0;// initial v_x
-       KFs.at(i).statePre.at<float>(3)=0;//initial v_y
+        Eigen.Vector6d temp(clusterCentroids.at(i).x, clusterCentroids.at(i).y, 0,0, clustersize.at(i).x, clustersize.at(i).y )
+       KFs.at(i).init(temp);
      }
      
      firstFrame=false;
 
-    // for (int i=0;i<KFs.size();i++)
-    //  {
-    //     geometry_msgs::Point pt;
-    //     pt.x=clusterCentroids.at(i).x;
-    //     pt.y=clusterCentroids.at(i).y;
-    //     prevClusterCenters.push_back(pt);
-    //  }
-   /*  // Print the initial state of the kalman filter for debugging
-     cout<<"KF0.satePre="<<KF0.statePre.at<float>(0)<<","<<KF0.statePre.at<float>(1)<<"\n";
-     cout<<"KF1.satePre="<<KF1.statePre.at<float>(0)<<","<<KF1.statePre.at<float>(1)<<"\n";
-     cout<<"KF2.satePre="<<KF2.statePre.at<float>(0)<<","<<KF2.statePre.at<float>(1)<<"\n";
-     cout<<"KF3.satePre="<<KF3.statePre.at<float>(0)<<","<<KF3.statePre.at<float>(1)<<"\n";
-     cout<<"KF4.satePre="<<KF4.statePre.at<float>(0)<<","<<KF4.statePre.at<float>(1)<<"\n";
-     cout<<"KF5.satePre="<<KF5.statePre.at<float>(0)<<","<<KF5.statePre.at<float>(1)<<"\n";
-
-     //cin.ignore();// To be able to see the printed initial state of the KalmanFilter
-     */
+   
 }
 
  

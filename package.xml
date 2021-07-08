@@ -47,7 +47,6 @@
   <depend>sensor_msgs</depend>
   <depend>visualization_msgs</depend>
   <build_depend>libpcl-all-dev</build_depend>
-  <depend>cv_bridge</depend>
 
   <depend>libpcl-all</depend>
 

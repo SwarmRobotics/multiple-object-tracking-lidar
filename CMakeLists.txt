@@ -11,7 +11,6 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   turtlebot3_detect
 )
-find_package( OpenCV REQUIRED )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -98,20 +97,19 @@ catkin_package(
 # include_directories(include)
 include_directories(
   ${catkin_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS}
   include
 )
 
 
 ## Declare a cpp library
-# add_library(kf_tracker
-#   src/${PROJECT_NAME}/kf_tracker.cpp
+# add_library(kalm
+#  src/kalman.cpp
 # )
 
 ## Declare a cpp executable
 # add_executable(kf_tracker_node src/kf_tracker_node.cpp)
-add_executable( kf_tracker src/main.cpp )
-target_link_libraries ( kf_tracker ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
+add_executable( kf_tracker src/kalman.cpp src/main.cpp )
+target_link_libraries ( kf_tracker  ${catkin_LIBRARIES})
  
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -133,7 +131,7 @@ target_link_libraries ( kf_tracker ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
 ## in contrast to setup.py, you can choose the destination
 # install(PROGRAMS
 #   scripts/my_python_script
-#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}s
 # )
 
 ## Mark executables and/or libraries for installation

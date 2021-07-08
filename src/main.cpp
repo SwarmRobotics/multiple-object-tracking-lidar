@@ -3,13 +3,14 @@
 #include <fstream>
 #include <algorithm>
 #include <iterator>
-#include "kf_tracker/featureDetection.h"
+// #include "kf_tracker/featureDetection.h"
 #include "kf_tracker/kalman.hpp"
 #include <ros/ros.h>
 #include <ros/console.h>
 
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
+
 #include "pcl_ros/point_cloud.h"
 #include <geometry_msgs/Point.h>
 #include <std_msgs/Float32MultiArray.h>
@@ -35,18 +36,19 @@
 #include <limits>
 #include <utility>
 #include "turtlebot3_detect/GetObst.h"
-
+#include <vector>
 using namespace std;
 
 
 ros::Publisher objID_pub;
 
 
-
+  int state_size=2; //[x,y]
+  int meas_size=2; //[x,y]
+    
   std::vector<KalmanFilter> KFs;
   ros::Publisher markerPub;
 
-  Eigen::Vector3d state; // [x,y,r]
 
   std::vector<int> objID;// Output of the data association using KF
  // measurement.setTo(Scalar(0));
@@ -55,9 +57,9 @@ ros::Publisher objID_pub;
 bool firstFrame=true;
 
 // calculate euclidean distance of two points
-  double euclidean_distance(Eigen::VectorXd& p1, pcl::PointXYZ& p2)
+  double euclidean_distance(Eigen::Vector2d& p1, pcl::PointXYZ& p2)
   {
-    return sqrt((p1[0]] - p2.x) * (p1[0] - p2.x) + (p1[1] - p2.y) * (p1[1] - p2.y)) ;
+    return sqrt((p1[0] - p2.x) * (p1[0] - p2.x) + (p1[1] - p2.y) * (p1[1] - p2.y)) ;
   }
 /*
 //Count unique object IDs. just to make sure same ID has not been assigned to two KF_Trackers.  
@@ -82,10 +84,10 @@ objID[0] corresponds to KFT0, objID[1] corresponds to KFT1 etc.
 
 std::pair<int,int> findIndexOfMin(std::vector<std::vector<float> >& distMat)
 {
-   // cout<<"findIndexOfMin cALLED\n";
+   // ROS_DEBUG_STREAM("findIndexOfMin cALLED\n";
     std::pair<int,int>minIndex;
     float minEl=std::numeric_limits<float>::max();
-   // cout<<"minEl="<<minEl<<"\n";
+   // ROS_DEBUG_STREAM("minEl="<<minEl<<"\n";
     for (int i=0; i<distMat.size();i++)
         for(int j=0;j<distMat.at(0).size();j++)
         {
@@ -97,22 +99,31 @@ std::pair<int,int> findIndexOfMin(std::vector<std::vector<float> >& distMat)
             }
 
         }
-   // cout<<"minIndex="<<minIndex.first<<","<<minIndex.second<<"\n";
+   // ROS_DEBUG_STREAM("minIndex="<<minIndex.first<<","<<minIndex.second<<"\n";
     return minIndex;
 }
-void KFT(std::vector<pcl::PointXYZ>& centers, std::vector<float>& clusterrad)
+void KFT(std::vector<pcl::PointXYZ>& centers)
 {
 
 
 
 // First predict, to update the internal statePre variable
-  std::vector<Eigen::VectorXd> pred;
+  std::vector<Eigen::Vector2d> pred;
+  pred.resize(KFs.size());
      visualization_msgs::MarkerArray clusterMarkers;
 
   for (int i =0; i < KFs.size(); i++)
   {
-       pred.push_back(KFs.at(i).state());
- 
+       pred[i]=KFs.at(i).state();  
+
+        this state is reporting nan
+
+
+
+
+
+
+       // assert (pred[i].rows()==2);
         visualization_msgs::Marker m;
 
         m.id=i;
@@ -125,16 +136,16 @@ void KFT(std::vector<pcl::PointXYZ>& centers, std::vector<float>& clusterrad)
         m.color.b=i%4?1:0;
 
        //geometry_msgs::Point clusterC(clusterCenters.at(objID[i]));
-       m.pose.position.x=pred[i][0];
-       m.pose.position.y=pred[i][1];
+       m.pose.position.x=pred.at(i)[0];
+       m.pose.position.y=pred.at(i)[1];
        m.pose.position.z=0;
 
-       m.scale.x=m.scale.y=m.scale.z=pred[i][2];
+       m.scale.x=m.scale.y=m.scale.z=1.0;//pred[i][2];
       
-       
-       visualization_msgs
+       cout<<"state"<<KFs.at(i).state()<<endl;
        clusterMarkers.markers.push_back(m);
-     }
+    }
+      ROS_DEBUG_STREAM("preds and marker  made ");
 
 
      markerPub.publish(clusterMarkers);
@@ -148,17 +159,25 @@ void KFT(std::vector<pcl::PointXYZ>& centers, std::vector<float>& clusterrad)
     objID.resize(KFs.size());//Allocate default elements so that [i] doesnt segfault. Should be done better
     std::vector<std::vector<float> > distMat;
 
-    for(int filterN=0;filterN<KFpredictions.size();filterN++)
+    ROS_DEBUG_STREAM("clear objID");
+
+    for(int filterN=0;filterN<pred.size();filterN++)
     {
         std::vector<float> distVec;
         for(int n=0;n<centers.size();n++)
-        {
-            distVec.push_back(euclidean_distance(pred[filterN],centers[n]));
+        {   
+            double d=euclidean_distance(pred[filterN],centers[n]);
+            distVec.push_back(d);
+            cout<<d<<" ";
         }
-
+        cout<<endl;
         distMat.push_back(distVec);
       
     }
+
+
+    ROS_DEBUG_STREAM("assign distance Matrix");
+
 
 
 
@@ -167,30 +186,41 @@ void KFT(std::vector<pcl::PointXYZ>& centers, std::vector<float>& clusterrad)
     {
         // 1. Find min(distMax)==> (i,j);
         std::pair<int,int> minIndex(findIndexOfMin(distMat)); // filterID, dataID
-     //    cout<<"Received minIndex="<<minIndex.first<<","<<minIndex.second<<"\n";
+     //    ROS_DEBUG_STREAM("Received minIndex="<<minIndex.first<<","<<minIndex.second<<"\n";
         // 2. objID[i]=clusterCenters[j]; counter++
         objID[minIndex.first]=minIndex.second;
     
         // 3. distMat[i,:]=10000; distMat[:,j]=10000
-        distMat[minIndex.first]=std::vector<float>(KFs.size(),10000.0);// Set the row to a high number.
+        for(int col=0; col<KFs.size();col++)
+        {
+          distMat[minIndex.first][col]=std::numeric_limits<float>::max();
+        }
         for(int row=0;row<distMat.size();row++)//set the column to a high number
         {
-            distMat[row][minIndex.second]=10000.0;
+            distMat[row][minIndex.second]=std::numeric_limits<float>::max();
         }
         // 4. if(counter<6) got to 1.
-     //   cout<<"clusterCount="<<clusterCount<<"\n";
+     //   ROS_DEBUG_STREAM("clusterCount="<<clusterCount<<"\n";
 
     }
+    for (int i=0; i<  objID.size(); i++)
+    {
+      cout<<objID[i]<<' ';
+    }
 
-   // cout<<"Got object IDs"<<"\n";
+    cout<<endl;
+
+    ROS_DEBUG_STREAM("assign objectID Matrix");
+
+   // ROS_DEBUG_STREAM("Got object IDs"<<"\n";
     //countIDs(objID);// for verif/corner cases
 
     //display objIDs
   /* DEBUG
-    cout<<"objID= ";
+    ROS_DEBUG_STREAM("objID= ";
     for(auto it=objID.begin();it!=objID.end();it++)
-        cout<<*it<<" ,";
-    cout<<"\n";
+        ROS_DEBUG_STREAM(*it<<" ,";
+    ROS_DEBUG_STREAM("\n";
     */
 
   
@@ -201,16 +231,22 @@ void KFT(std::vector<pcl::PointXYZ>& centers, std::vector<float>& clusterrad)
         obj_id.data.push_back(*it);
     // Publish the object IDs
     objID_pub.publish(obj_id);
+    ROS_DEBUG_STREAM("published objectID Matrix");
 
 
     for (int i=0;i<KFs.size();i++)
     {
-        Eigen::Vector3d measMat(centers[objID[i]].x,  centers[objID[i]].y, clusterrad[objID[i]])
+       ROS_DEBUG_STREAM("updating");
+         Eigen::Vector2d measMat(centers[objID[i]].x,  centers[objID[i]].y); //[x,y,r1,r2]
+          cout<<i<<' '<<objID[i]<<' '<<measMat<<endl;
           KFs.at(i).update(measMat);
+
+       ROS_DEBUG_STREAM("updating done");
     }
 
  
-   
+       ROS_DEBUG_STREAM("done kd");
+
 }
 
 
@@ -218,7 +254,8 @@ void KFT(std::vector<pcl::PointXYZ>& centers, std::vector<float>& clusterrad)
 void cloud_cb (const sensor_msgs::PointCloud2ConstPtr& input)
 
 {
-   // cout<<"IF firstFrame="<<firstFrame<<"\n";
+  ROS_DEBUG_STREAM("start");
+   // ROS_DEBUG_STREAM("IF firstFrame="<<firstFrame<<"\n";
     // If this is the first frame, initialize kalman filters for the clustered objects
 if (firstFrame)
 {   
@@ -234,6 +271,7 @@ if (firstFrame)
     return;
   }
 
+ROS_DEBUG_STREAM("culster start");
   tree->setInputCloud (input_cloud);
 
 
@@ -246,14 +284,13 @@ if (firstFrame)
   ec.setInputCloud (input_cloud);
   /* Extract the clusters out of pc and save indices in cluster_indices.*/
   ec.extract (cluster_indices);
-
+ROS_DEBUG_STREAM("culster made");
   
   std::vector<pcl::PointIndices>::const_iterator it;
   std::vector<int>::const_iterator pit;
   // Vector of cluster pointclouds
     // Cluster centroids
   std::vector<pcl::PointXYZ> clusterCentroids;
-  std::vector<float> clusterrad;
 
   for(it = cluster_indices.begin(); it != cluster_indices.end(); ++it) {
           
@@ -283,18 +320,11 @@ if (firstFrame)
 
       //Get the centroid of the cluster
       clusterCentroids.push_back(centroid);
-      float max_dst=0
-      for(pit = it->indices.begin(); pit != it->indices.end(); pit++) 
-      {
-        float dist = sqrt( (input_cloud->points[*pit].x- centroid.x)*(input_cloud->points[*pit].x- centroid.x) +  (input_cloud->points[*pit].y- centroid.y)*(input_cloud->points[*pit].y- centroid.y) ) 
-        if(max_dst< dist)
-        {
-          max_dst=dist
-        }
-      }
-      clusterrad.push_back(max_dst);
+
 
     }
+    ROS_DEBUG_STREAM("centroid found");
+
 
  
 
@@ -304,16 +334,16 @@ if (firstFrame)
       centroid.x=0.0;
       centroid.y=0.0;
       centroid.z=0.0;
-  
+      ROS_DEBUG_STREAM("adding centroid");
+
        clusterCentroids.push_back(centroid);
-       clusterrad.push_back(0);
     }
     
       for(int i =0; i< KFs.size(); i++)
       {
        // Set initial state
-        Eigen.Vector3d temp(clusterCentroids.at(i).x, clusterCentroids.at(i).y, clusterrad.at(i))
-       KFs.at(i).init(temp);
+        Eigen::Vector2d temp(clusterCentroids.at(i).x, clusterCentroids.at(i).y);
+        KFs.at(i).init(0,temp);
      }
      
      firstFrame=false;
@@ -324,13 +354,14 @@ if (firstFrame)
  
 else
 { 
-  //cout<<"ELSE firstFrame="<<firstFrame<<"\n";
+  //ROS_DEBUG_STREAM("ELSE firstFrame="<<firstFrame<<"\n";
   pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud (new pcl::PointCloud<pcl::PointXYZ>);
   pcl::PointCloud<pcl::PointXYZ>::Ptr clustered_cloud (new pcl::PointCloud<pcl::PointXYZ>);
       /* Creating the KdTree from input point cloud*/
   pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
 
   pcl::fromROSMsg (*input, *input_cloud);
+  ROS_DEBUG_STREAM("culster start");
 
   tree->setInputCloud (input_cloud);
   if(input_cloud->empty())
@@ -342,6 +373,7 @@ else
    * Cluster_indices is a vector containing one instance of PointIndices for each detected 
    * cluster. Cluster_indices[0] contain all indices of the first cluster in input point cloud.
    */
+
   std::vector<pcl::PointIndices> cluster_indices;
   pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
   ec.setClusterTolerance (0.1);
@@ -349,10 +381,13 @@ else
   ec.setMaxClusterSize (600);
   ec.setSearchMethod (tree);
   ec.setInputCloud (input_cloud);
-//cout<<"PCL init successfull\n";
+//ROS_DEBUG_STREAM("PCL init successfull\n";
   /* Extract the clusters out of pc and save indices in cluster_indices.*/
   ec.extract (cluster_indices);
-//cout<<"PCL extract successfull\n";
+
+  ROS_DEBUG_STREAM("culster made");
+
+//ROS_DEBUG_STREAM("PCL extract successfull\n";
   /* To separate each cluster out of the vector<PointIndices> we have to 
    * iterate through cluster_indices, create a new PointCloud for each 
    * entry and write all points of the current cluster in the PointCloud. 
@@ -367,7 +402,6 @@ else
 
      // Cluster centroids
   std::vector<pcl::PointXYZ> clusterCentroids;
-  std::vector<float> clusterrad;
 
   if (cluster_indices.size()> (int)cluster_size)
     cluster_size+=0.1;
@@ -376,7 +410,7 @@ else
   
 
 
-  ROS_DEBUG_STREAM("clusters"<< cluster_indices.size()<<"  smoothed"<< cluster_size <<" KFS"<< KFs.size()<<endl);
+  ROS_DEBUG_STREAM("clusters"<< cluster_indices.size()<<"  smoothed"<< cluster_size <<" KFS"<< KFs.size());
 
   for(it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
    {
@@ -403,31 +437,29 @@ else
 
       //Get the centroid of the cluster
       clusterCentroids.push_back(centroid);
-      float max_dst=0
-      for(pit = it->indices.begin(); pit != it->indices.end(); pit++) 
-      {
-        float dist = sqrt( (input_cloud->points[*pit].x- centroid.x)*(input_cloud->points[*pit].x- centroid.x) +  (input_cloud->points[*pit].y- centroid.y)*(input_cloud->points[*pit].y- centroid.y) ) 
-        if(max_dst< dist)
-        {
-          max_dst=dist
-        }
-      }
-      clusterrad.push_back(max_dst);
+
     }
+        ROS_DEBUG_STREAM("centroids found");
 
-  if((int)cluster_size>KFs.size())
+
+  if((int)cluster_size>KFs.size() and clusterCentroids.size()>KFs.size())
     { 
-      cout<<"increasing size";
-      KFs.push_back(KalmanFilter(stateDim,measDim,ctrlDim,CV_32F));
-       Eigen.Vector3d temp(clusterCentroids.at(i).x, clusterCentroids.at(i).y, clusterrad.at(i))
-      KFs.at(KFs.size()-1).init(temp)
+      ROS_DEBUG_STREAM("increasing size");
+      KalmanFilter temp(state_size, meas_size, 0.1);
+      temp.init(0, Eigen::Vector2d (0.0,0.0));
 
-      cout<<"done increasing"<<endl;
+      KFs.push_back(temp);
+
+      ROS_DEBUG_STREAM("done increasing");
 
     }
    else if ((int)cluster_size<KFs.size())
    {
-     KFs.pop_back();
+          ROS_DEBUG_STREAM("decrease size");
+
+       KFs.pop_back();
+           ROS_DEBUG_STREAM("done decreasing");
+
    } 
 
 
@@ -437,16 +469,17 @@ else
       centroid.x=0.0;
       centroid.y=0.0;
       centroid.z=0.0;
-     
+         ROS_DEBUG_STREAM("adding centroid");
+
        clusterCentroids.push_back(centroid);
-       clusterrad.push_back(0)
     }
 
 
  
  
-    KFT(clusterCentroids, clusterrad);
- 
+    KFT(clusterCentroids);
+     ROS_DEBUG_STREAM("done cluster"<<" KFS"<< KFs.size());
+
 
 } 
 
@@ -456,15 +489,17 @@ else
  bool getobstacles(turtlebot3_detect::GetObst::Request  &req,
          turtlebot3_detect::GetObst::Response &res)
 {
+    ROS_DEBUG_STREAM("obst requested");
     res.points.clear();
     for (int i =0; i < KFs.size(); i++)
      {
-        Eigen::Vector3d pred = KFs.at(i).state();
+        Eigen::Vector2d pred = KFs.at(i).state();
+
         geometry_msgs::Point32 p;
         p.x=pred[0];
         p.y=pred[1];
         res.points.push_back(p);
-        res.radii.pushback(pred[2]) 
+        //res.radii.push_back(pred[2]) ;
     }
     res.head.stamp= ros::Time::now();
     return true;
@@ -486,7 +521,7 @@ int main(int argc, char** argv)
 
 
 
-//cout<<"About to setup callback\n";
+//ROS_DEBUG_STREAM("About to setup callback\n";
 
 // Create a ROS subscriber for the input point cloud
   ros::Subscriber sub = nh.subscribe ("filtered_cloud", 1, cloud_cb);
@@ -496,8 +531,7 @@ int main(int argc, char** argv)
 
   for( int i =0; i<count; i++)
     {
-      KalmanFilter temp();
-      KFs.push_back(temp);
+      KFs.push_back(KalmanFilter(state_size, meas_size, 0.1));
    //   pub_clusters.push_back( nh.advertise<sensor_msgs::PointCloud2> ("cluster_"+to_string(i), 1, true)); 
 
   }

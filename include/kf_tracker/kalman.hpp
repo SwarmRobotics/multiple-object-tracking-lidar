@@ -35,8 +35,10 @@ public:
 
   /**
   * Create a blank estimator.
+  * n=number of states
+  * m=number of measurements
   */
-  KalmanFilter();
+  KalmanFilter(int n_, int m_, double dt_);
 
   /**
   * Initialize the filter with initial states as zero.
@@ -46,7 +48,7 @@ public:
   /**
   * Initialize the filter with a guess for initial states.
   */
-  void init(double t0, const Eigen::VectorXd& x0);
+  void init(double t0, const Eigen::VectorXd x0);
 
   /**
   * Update the estimated state based on measured values. The

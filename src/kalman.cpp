@@ -8,7 +8,7 @@
 #include <iostream>
 #include <stdexcept>
 
-#include "kalman.hpp"
+#include "kf_tracker/kalman.hpp"
 
 KalmanFilter::KalmanFilter(
     double dt,
@@ -24,9 +24,23 @@ KalmanFilter::KalmanFilter(
   I.setIdentity();
 }
 
-KalmanFilter::KalmanFilter() {}
+KalmanFilter::KalmanFilter(int n_, int m_, double dt_) {
+    m=m_;
+    n=n_;
+    A= Eigen::MatrixXd(n,n);
+    C=Eigen::MatrixXd(m,n);
+    Q=Eigen::MatrixXd(n,n);
+    R=Eigen::MatrixXd(m,m);
+    P0=Eigen::MatrixXd(n,n);
+    dt=dt_;
+    initialized=false;
+    I=Eigen::MatrixXd(n,n);
+    I.setIdentity();
+    x_hat= Eigen::VectorXd(n);
+    x_hat_new= Eigen::VectorXd(n);
+}
 
-void KalmanFilter::init(double t0, const Eigen::VectorXd& x0) {
+void KalmanFilter::init(double t0, const Eigen::VectorXd x0) {
   x_hat = x0;
   P = P0;
   this->t0 = t0;

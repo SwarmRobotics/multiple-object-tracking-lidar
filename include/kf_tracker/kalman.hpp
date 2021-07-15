@@ -12,6 +12,10 @@
 
 #pragma once
 
+namespace Eigen
+ {typedef Eigen::Matrix< double, 5, 1 > Vector5d;
+typedef Eigen::Matrix< double, 8, 1 > Vector8d;
+ }
 class KalmanFilter {
 
 public:

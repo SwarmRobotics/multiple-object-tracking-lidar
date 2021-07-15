@@ -27,17 +27,39 @@ KalmanFilter::KalmanFilter(
 KalmanFilter::KalmanFilter(int n_, int m_, double dt_) {
     m=m_;
     n=n_;
-    A= Eigen::MatrixXd(n,n);
-    C=Eigen::MatrixXd(m,n);
-    Q=Eigen::MatrixXd(n,n);
-    R=Eigen::MatrixXd(m,m);
-    P0=Eigen::MatrixXd(n,n);
+    A= Eigen::MatrixXd::Zero(n,n);
+    C=Eigen::MatrixXd::Zero(m,n);
+    Q=Eigen::MatrixXd::Zero(n,n);
+    R=Eigen::MatrixXd::Zero(m,m);
+    P0=Eigen::MatrixXd::Zero(n,n);
     dt=dt_;
     initialized=false;
-    I=Eigen::MatrixXd(n,n);
+    I=Eigen::MatrixXd::Zero(n,n);
     I.setIdentity();
-    x_hat= Eigen::VectorXd(n);
-    x_hat_new= Eigen::VectorXd(n);
+    x_hat= Eigen::VectorXd::Zero(n);
+    x_hat_new= Eigen::VectorXd::Zero(n);
+
+    for(int i=0; i<n; i++)
+    {
+      A(i,i)=1;
+      if(i<n-1)
+        A(i,i+1)=dt;
+      Q(i,i)=0.01;
+      P0(i,i)=0.01;
+    }
+    for(int i=0; i<m; i++)
+    {
+      R(i,i)=0.01;
+    }
+    for(int i=0; i<m; i++)
+    {
+      for(int j=0; j<n; j++)
+      {
+        if (i==j)
+         C(i,j)=1;
+      }
+    }
+
 }
 
 void KalmanFilter::init(double t0, const Eigen::VectorXd x0) {
@@ -66,6 +88,14 @@ void KalmanFilter::update(const Eigen::VectorXd& y) {
   K = P*C.transpose()*(C*P*C.transpose() + R).inverse();
   x_hat_new += K * (y - C*x_hat_new);
   P = (I - K*C)*P;
+  // std::cout<<"y " << y <<std::endl
+  // << " P"<< P<<std::endl
+  // << " A"<< A<<std::endl
+  // << " K"<< K<<std::endl
+  // << " Q"<< Q<<std::endl
+  // << "x_hat old "<<x_hat<<std::endl
+  // << "x_hat new "<<x_hat_new<<std::endl;
+
   x_hat = x_hat_new;
 
   t += dt;
